@@ -1,8 +1,6 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { google } = require('googleapis');
-const stream = require('stream');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,27 +8,11 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Konfigurasi Google Drive API
-const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
-let drive = null;
-
-if (fs.existsSync(CREDENTIALS_PATH)) {
-    try {
-        const auth = new google.auth.GoogleAuth({
-            keyFile: CREDENTIALS_PATH,
-            scopes: ['https://www.googleapis.com/auth/drive.file'],
-        });
-        drive = google.drive({ version: 'v3', auth });
-        console.log('Google Drive API berhasil diinisialisasi.');
-    } catch (err) {
-        console.error('Gagal menginisialisasi Google Drive API:', err);
-    }
-} else {
-    console.warn('PERINGATAN: File credentials.json tidak ditemukan. Foto akan disimpan secara lokal.');
+// Pastikan folder uploads lokal ada
+const uploadDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadDir)){
+    fs.mkdirSync(uploadDir, { recursive: true });
 }
-
-// ID Folder Google Drive Anda (Ganti dengan ID folder yang sudah dishare)
-const FOLDER_ID = '1TDhcL8AhRwyq1cbxfmCTPcfTaj4uPnsS'; 
 
 // Database Memori Sementara
 const sessions = {};
@@ -84,13 +66,13 @@ app.post('/api/admin/create-session-config', (req, res) => {
     res.json({ success: true, sessionId: sessionId });
 });
 
-// API Upload Foto ke Google Drive (Dengan Cadangan Lokal)
-app.post('/api/upload-photo', async (req, res) => {
+// API Upload Foto ke Server Lokal (Aman & Stabil)
+app.post('/api/upload-photo', (req, res) => {
     const { sessionId, imageBase64 } = req.body;
     const session = sessions[sessionId];
     
     if (!session) {
-        return.json({ success: false, message: 'Sesi tidak ditemukan.' });
+        return res.json({ success: false, message: 'Sesi tidak ditemukan.' });
     }
     if (session.usedQuota >= session.quota) {
         return.json({ success: false, message: 'Kuota foto Anda sudah habis!' });
@@ -98,48 +80,14 @@ app.post('/api/upload-photo', async (req, res) => {
 
     try {
         const base64Data = imageBase64.replace(/^data:image\/jpeg;base64,/, "");
-        const buffer = Buffer.from(base64Data, 'base64');
-        const filename = `photo_${session.barcode.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.jpg`;
+        const filename = `photo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+        const filepath = path.join(uploadDir, filename);
 
-        let photoUrl = '';
+        fs.writeFileSync(filepath, base64Data, 'base64');
 
-        // Coba upload ke Google Drive jika aktif
-        if (drive && FOLDER_ID !== '1TDhcL8AhRwyq1cbxfmCTPcfTaj4uPnsS') {
-            const bufferStream = new stream.PassThrough();
-            bufferStream.end(buffer);
-
-            const fileMetadata = {
-                name: filename,
-                parents: [FOLDER_ID]
-            };
-
-            const media = {
-                mimeType: 'image/jpeg',
-                body: bufferStream
-            };
-
-            const driveResponse = await drive.files.create({
-                resource: fileMetadata,
-                media: media,
-                fields: 'id, webContentLink, webViewLink',
-            });
-
-            // Jadikan webContentLink publik atau gunakan format thumbnail drive jika diperlukan
-            photoUrl = driveResponse.data.webContentLink || `https://drive.google.com/uc?id=${driveResponse.data.id}`;
-        } else {
-            // Fallback simpan lokal jika Google Drive belum dikonfigurasi
-            const uploadDir = path.join(__dirname, 'public', 'uploads');
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-            const filepath = path.join(uploadDir, filename);
-            fs.writeFileSync(filepath, buffer);
-            photoUrl = `/uploads/${filename}`;
-        }
-
+        const photoUrl = `/uploads/${filename}`;
         session.usedQuota += 1;
 
-        // Catat ke galeri admin
         global.allPhotos.push({
             guestName: session.barcode,
             url: photoUrl,
@@ -148,8 +96,8 @@ app.post('/api/upload-photo', async (req, res) => {
 
         res.json({ success: true, photoUrl: photoUrl });
     } catch (err) {
-        console.error('Gagal mengunggah foto:', err);
-        res.json({ success: false, message: 'Gagal menyimpan foto ke server/cloud.' });
+        console.error('Gagal menyimpan foto:', err);
+        res.json({ success: false, message: 'Gagal menyimpan foto ke server.' });
     }
 });
 
