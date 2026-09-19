@@ -2,37 +2,126 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Photobooth Kamera Tamu</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .filter-normal { filter: none; }
+        :root {
+            --safe-t: env(safe-area-inset-top, 0px);
+            --safe-b: env(safe-area-inset-bottom, 0px);
+            --safe-l: env(safe-area-inset-left, 0px);
+            --safe-r: env(safe-area-inset-right, 0px);
+        }
+        html, body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #000;
+            overscroll-behavior: none;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* ===== Filter definitions (fungsi tidak diubah, hanya ditambah pilihan) ===== */
+        .filter-normal    { filter: none; }
         .filter-grayscale { filter: grayscale(100%); }
-        .filter-sepia { filter: sepia(80%); }
-        .filter-vintage { filter: contrast(120%) brightness(90%) sepia(40%); }
-        .filter-bright { filter: brightness(125%) saturate(120%); }
-        .filter-warm { filter: sepia(50%) saturate(140%) brightness(105%); }
-        .filter-cool { filter: hue-rotate(180deg) saturate(120%) brightness(95%); }
+        .filter-sepia     { filter: sepia(80%); }
+        .filter-vintage   { filter: contrast(120%) brightness(90%) sepia(40%); }
+        .filter-bright    { filter: brightness(125%) saturate(120%); }
+        .filter-warm      { filter: sepia(50%) saturate(140%) brightness(105%); }
+        .filter-cool      { filter: hue-rotate(180deg) saturate(120%) brightness(95%); }
+        .filter-vivid     { filter: saturate(165%) contrast(112%); }
+        .filter-dramatic  { filter: contrast(145%) saturate(70%) brightness(95%); }
+        .filter-noir      { filter: grayscale(100%) contrast(135%) brightness(88%); }
+        .filter-fade      { filter: brightness(112%) contrast(85%) saturate(65%); }
+        .filter-chrome    { filter: saturate(145%) contrast(122%) hue-rotate(-8deg); }
+        .filter-film      { filter: sepia(22%) hue-rotate(-12deg) saturate(125%) contrast(106%); }
+
+        /* Video dasar: id-level supaya tidak hilang saat JS mengganti className */
+        #video {
+            top: 0; left: 0;
+            background: #111;
+        }
+
+        /* Top overlay pills */
+        .top-scrim {
+            padding-top: calc(var(--safe-t) + 10px);
+        }
+        .pill {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            background: rgba(20,20,20,0.45);
+            border: 1px solid rgba(255,255,255,0.12);
+        }
+
+        /* Bottom control scrim, mirip native camera */
+        .bottom-scrim {
+            background: linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.75) 40%, rgba(0,0,0,0.0) 100%);
+            padding-bottom: calc(var(--safe-b) + 10px);
+        }
+
+        /* Chip pilihan bingkai */
+        .frame-btn {
+            transition: transform .15s ease, background-color .15s ease;
+        }
+        .frame-btn.bg-blue-600 {
+            background-color: #fff !important;
+            color: #000 !important;
+        }
+        .frame-btn.bg-gray-700 {
+            background-color: rgba(255,255,255,0.12) !important;
+            color: rgba(255,255,255,0.85) !important;
+        }
+
+        /* Carousel filter bergaya kamera bawaan: lingkaran + label di bawah */
+        .filter-item { scroll-snap-align: center; }
+        .filter-swatch {
+            width: 52px; height: 52px;
+            border-radius: 9999px;
+            background: linear-gradient(135deg, #7a7a7a 0%, #cfcfcf 45%, #4a4a4a 100%);
+            border: 2px solid rgba(255,255,255,0.25);
+            transition: transform .15s ease, border-color .15s ease;
+        }
+        .filter-item.bg-blue-600 .filter-swatch {
+            border-color: #fff;
+            transform: scale(1.08);
+        }
+        .filter-item.bg-blue-600 .filter-label {
+            color: #fff;
+            font-weight: 700;
+        }
+        .filter-item.bg-gray-700 .filter-label {
+            color: rgba(255,255,255,0.6);
+        }
+        /* Netralkan bg tailwind bawaan pada tombol filter (kini pakai lingkaran) */
+        .filter-item.bg-blue-600, .filter-item.bg-gray-700 {
+            background-color: transparent !important;
+        }
+
+        #captureBtn {
+            width: 74px; height: 74px;
+        }
+        #captureBtn:active .shutter-inner { transform: scale(0.82); }
+        .shutter-inner { transition: transform .12s ease; }
+
+        .side-btn {
+            width: 48px; height: 48px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        #lastPhotoThumb {
+            width: 48px; height: 48px;
+            border: 2px solid rgba(255,255,255,0.6);
+        }
     </style>
 </head>
-<body class="bg-black text-white flex flex-col h-[100dvh] justify-between overflow-hidden">
+<body class="bg-black text-white h-[100dvh] overflow-hidden relative">
 
-    <!-- Header Info -->
-    <header class="p-3 bg-gray-900 flex justify-between items-center text-sm border-b border-gray-800 shrink-0 z-20">
-        <div>
-            <h1 id="coupleTitle" class="font-bold text-sm truncate max-w-[200px]">Memuat...</h1>
-            <p class="text-[11px] text-gray-400">Tamu: <span id="barcodeText">-</span></p>
-        </div>
-        <div class="bg-blue-600 px-3 py-1 rounded-full text-xs font-semibold">
-            Sisa Kuota: <span id="quotaCount">3</span>
-        </div>
-    </header>
-
-    <!-- Kamera Viewport & Bingkai -->
-    <main class="relative flex-1 flex items-center justify-center bg-black overflow-hidden my-auto">
-        <div id="cameraContainer" class="relative w-full h-full flex items-center justify-center">
+    <!-- Kamera Viewport (full bleed, seperti aplikasi kamera bawaan) -->
+    <main class="absolute inset-0">
+        <div id="cameraContainer" class="relative w-full h-full">
             <video id="video" autoplay playsinline muted class="absolute w-full h-full object-cover filter-normal"></video>
-            
+
             <div id="frameOverlay" class="absolute inset-0 pointer-events-none border-[12px] border-white/80 box-border z-10 flex flex-col justify-between p-3">
                 <div class="flex justify-between items-start">
                     <span id="frameTopLeft" class="text-[11px] bg-black/50 px-2 py-0.5 rounded text-white/90"></span>
@@ -42,35 +131,109 @@
                 </div>
             </div>
 
-            <div id="countdown" class="absolute inset-0 bg-black/60 flex items-center justify-center text-7xl font-bold z-30 hidden">3</div>
+            <div id="countdown" class="absolute inset-0 bg-black/60 flex items-center justify-center text-8xl font-bold z-30 hidden">3</div>
         </div>
         <canvas id="canvas" class="hidden"></canvas>
     </main>
 
-    <!-- Panel Kontrol (Filter, Frame, Tombol Shutter) -->
-    <footer class="bg-gray-900 p-3 space-y-2 shrink-0 z-20 shadow-2xl">
-        <!-- Pilihan Filter -->
-        <div class="flex space-x-2 overflow-x-auto pb-1 text-xs no-scrollbar">
-            <button onclick="setFilter('filter-normal', this)" class="filter-btn px-3 py-1 bg-blue-600 rounded-full whitespace-nowrap">Normal</button>
-            <button onclick="setFilter('filter-grayscale', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">B&W</button>
-            <button onclick="setFilter('filter-sepia', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Sepia</button>
-            <button onclick="setFilter('filter-vintage', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Vintage</button>
-            <button onclick="setFilter('filter-bright', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Glow</button>
-            <button onclick="setFilter('filter-warm', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Warm</button>
-            <button onclick="setFilter('filter-cool', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Cool</button>
+    <!-- Overlay atas: info sesi + sisa kuota (melayang di atas preview, gaya kamera bawaan) -->
+    <header class="absolute top-0 left-0 right-0 z-20 top-scrim px-3 flex justify-between items-start pointer-events-none">
+        <div class="pill rounded-full px-3 py-1.5 pointer-events-auto max-w-[62%]">
+            <h1 id="coupleTitle" class="font-semibold text-xs leading-tight truncate">Memuat...</h1>
+            <p class="text-[10px] text-white/60 leading-tight">Tamu: <span id="barcodeText">-</span></p>
+        </div>
+        <div class="pill rounded-full px-3 py-1.5 pointer-events-auto">
+            <span class="text-[11px] font-semibold">Sisa <span id="quotaCount">3</span></span>
+        </div>
+    </header>
+
+    <!-- Panel Kontrol Bawah -->
+    <footer class="absolute bottom-0 left-0 right-0 z-20 bottom-scrim pt-6">
+
+        <!-- Pilihan Bingkai -->
+        <div class="flex space-x-2 overflow-x-auto no-scrollbar px-3 pb-3 text-xs">
+            <button onclick="setFrame('minimalist')" class="frame-btn px-3 py-1.5 bg-blue-600 rounded-full whitespace-nowrap text-[11px] shrink-0">Minimalis</button>
+            <button onclick="setFrame('romantic')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">Romantic</button>
+            <button onclick="setFrame('elegant')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">Elegant</button>
+            <button onclick="setFrame('rustic')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">Rustic</button>
         </div>
 
-        <!-- Pilihan Bingkai & Tombol Shutter -->
-        <div class="flex items-center justify-between pt-1">
-            <div class="flex space-x-2 overflow-x-auto text-xs max-w-[70%]">
-                <button onclick="setFrame('minimalist')" class="frame-btn px-2.5 py-1 bg-blue-600 rounded-full whitespace-nowrap text-[11px]">Minimalis</button>
-                <button onclick="setFrame('romantic')" class="frame-btn px-2.5 py-1 bg-gray-700 rounded-full whitespace-nowrap text-[11px]">Romantic</button>
-                <button onclick="setFrame('elegant')" class="frame-btn px-2.5 py-1 bg-gray-700 rounded-full whitespace-nowrap text-[11px]">Elegant</button>
-                <button onclick="setFrame('rustic')" class="frame-btn px-2.5 py-1 bg-gray-700 rounded-full whitespace-nowrap text-[11px]">Rustic</button>
-            </div>
+        <!-- Carousel Filter, gaya kamera bawaan -->
+        <div class="flex space-x-4 overflow-x-auto no-scrollbar px-4 pb-4 snap-x">
+            <button onclick="setFilter('filter-normal', this)" class="filter-item bg-blue-600 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-normal"></span>
+                <span class="filter-label text-[10px]">Normal</span>
+            </button>
+            <button onclick="setFilter('filter-vivid', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-vivid"></span>
+                <span class="filter-label text-[10px]">Vivid</span>
+            </button>
+            <button onclick="setFilter('filter-dramatic', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-dramatic"></span>
+                <span class="filter-label text-[10px]">Dramatic</span>
+            </button>
+            <button onclick="setFilter('filter-grayscale', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-grayscale"></span>
+                <span class="filter-label text-[10px]">B&amp;W</span>
+            </button>
+            <button onclick="setFilter('filter-noir', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-noir"></span>
+                <span class="filter-label text-[10px]">Noir</span>
+            </button>
+            <button onclick="setFilter('filter-sepia', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-sepia"></span>
+                <span class="filter-label text-[10px]">Sepia</span>
+            </button>
+            <button onclick="setFilter('filter-vintage', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-vintage"></span>
+                <span class="filter-label text-[10px]">Vintage</span>
+            </button>
+            <button onclick="setFilter('filter-film', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-film"></span>
+                <span class="filter-label text-[10px]">Film</span>
+            </button>
+            <button onclick="setFilter('filter-fade', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-fade"></span>
+                <span class="filter-label text-[10px]">Fade</span>
+            </button>
+            <button onclick="setFilter('filter-chrome', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-chrome"></span>
+                <span class="filter-label text-[10px]">Chrome</span>
+            </button>
+            <button onclick="setFilter('filter-bright', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-bright"></span>
+                <span class="filter-label text-[10px]">Glow</span>
+            </button>
+            <button onclick="setFilter('filter-warm', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-warm"></span>
+                <span class="filter-label text-[10px]">Warm</span>
+            </button>
+            <button onclick="setFilter('filter-cool', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-cool"></span>
+                <span class="filter-label text-[10px]">Cool</span>
+            </button>
+        </div>
 
-            <button id="captureBtn" onclick="startCountdown()" class="w-14 h-14 bg-white rounded-full border-4 border-gray-400 flex items-center justify-center shadow-lg active:scale-95 transition shrink-0">
-                <div class="w-10 h-10 bg-red-600 rounded-full"></div>
+        <!-- Baris kontrol utama: thumbnail terakhir - shutter - flip kamera -->
+        <div class="flex items-center justify-between px-6 pb-2">
+            <button id="lastPhotoThumbBtn" onclick="reviewLastPhoto()" class="rounded-xl overflow-hidden bg-white/10 flex items-center justify-center shrink-0" style="width:48px;height:48px;">
+                <img id="lastPhotoThumb" src="" class="hidden w-full h-full object-cover rounded-xl" alt="Foto terakhir">
+                <svg id="lastPhotoPlaceholder" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <rect x="3" y="5" width="18" height="14" rx="2"/>
+                    <circle cx="8.5" cy="10.5" r="1.5"/>
+                    <path d="M21 15l-5-5L5 19"/>
+                </svg>
+            </button>
+
+            <button id="captureBtn" onclick="startCountdown()" class="rounded-full border-4 border-white/90 flex items-center justify-center shrink-0">
+                <div class="shutter-inner w-14 h-14 bg-white rounded-full"></div>
+            </button>
+
+            <button onclick="switchCamera()" class="side-btn rounded-full flex items-center justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/>
+                    <path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/>
+                </svg>
             </button>
         </div>
     </footer>
@@ -90,6 +253,8 @@
         const sessionId = urlParams.get('session');
         let sessionData = {};
         let localImageData = '';
+        let currentFacingMode = 'user'; // 'user' untuk depan, 'environment' untuk belakang
+        let currentStream = null;
 
         async function initSession() {
             if (!sessionId) {
@@ -105,7 +270,7 @@
                     document.getElementById('coupleTitle').innerText = sessionData.coupleName;
                     document.getElementById('barcodeText').innerText = sessionData.barcode;
                     updateQuotaDisplay();
-                    initCamera();
+                    initCamera(currentFacingMode);
                 } else {
                     alert(result.message);
                     window.location.href = '/index.html';
@@ -125,22 +290,40 @@
             }
         }
 
-        async function initCamera() {
+        async function initCamera(facingMode) {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+                // Matikan stream kamera sebelumnya jika ada
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+
+                const constraints = {
+                    video: { 
+                        facingMode: facingMode, 
+                        width: { ideal: 1280 }, 
+                        height: { ideal: 720 } 
+                    },
                     audio: false
-                });
-                document.getElementById('video').srcObject = stream;
+                };
+
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                document.getElementById('video').srcObject = currentStream;
             } catch (err) {
-                alert('Gagal mengakses kamera HP.');
+                console.error('Gagal mengakses kamera:', err);
+                alert('Gagal mengakses kamera HP. Pastikan izin kamera diizinkan.');
             }
+        }
+
+        function switchCamera() {
+            // Tukar mode kamera antara depan ('user') dan belakang ('environment')
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            initCamera(currentFacingMode);
         }
 
         function setFilter(filterClass, btn) {
             const video = document.getElementById('video');
             video.className = `absolute w-full h-full object-cover ${filterClass}`;
-            document.querySelectorAll('.filter-btn').forEach(b => b.classList.replace('bg-blue-600', 'bg-gray-700'));
+            document.querySelectorAll('.filter-btn, .filter-item').forEach(b => b.classList.replace('bg-blue-600', 'bg-gray-700'));
             btn.classList.replace('bg-gray-700', 'bg-blue-600');
         }
 
@@ -195,6 +378,7 @@
             canvas.height = video.videoHeight || 720;
             const ctx = canvas.getContext('2d');
 
+            // Jika memakai kamera depan, kita buat efek cermin (mirror) opsional atau biarkan natural
             ctx.filter = window.getComputedStyle(video).filter;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
@@ -210,6 +394,15 @@
             localImageData = canvas.toDataURL('image/jpeg', 0.9);
             document.getElementById('resultImage').src = localImageData;
             document.getElementById('resultModal').classList.remove('hidden');
+
+            // Perbarui thumbnail foto terakhir di kontrol bawah (elemen baru, murni tampilan)
+            const thumb = document.getElementById('lastPhotoThumb');
+            const placeholder = document.getElementById('lastPhotoPlaceholder');
+            if (thumb) {
+                thumb.src = localImageData;
+                thumb.classList.remove('hidden');
+                if (placeholder) placeholder.classList.add('hidden');
+            }
 
             uploadPhotoToServer(localImageData);
         }
@@ -242,6 +435,13 @@
 
         function closeModal() {
             document.getElementById('resultModal').classList.add('hidden');
+        }
+
+        // Membuka kembali foto terakhir lewat thumbnail di kontrol bawah (fitur tambahan, gaya kamera bawaan)
+        function reviewLastPhoto() {
+            if (!localImageData) return;
+            document.getElementById('resultImage').src = localImageData;
+            document.getElementById('resultModal').classList.remove('hidden');
         }
 
         window.onload = () => {
