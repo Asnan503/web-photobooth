@@ -3,58 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - QR Code Utama Photobooth</title>
+    <title>Admin Panel - Generator QR Photobooth</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Library QRCode JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
-<body class="bg-gray-950 text-white min-h-screen flex flex-col items-center justify-center p-6">
+<body class="bg-gray-950 text-white min-h-screen flex flex-col items-center justify-center p-4">
 
-    <div class="w-full max-w-md bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 text-center space-y-6">
+    <div class="w-full max-w-md bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-6">
         <div>
             <span class="text-xs uppercase tracking-widest text-pink-400 font-semibold">Panel Panitia</span>
-            <h1 class="text-2xl font-bold mt-1">QR Code Photobooth Utama</h1>
-            <p class="text-xs text-gray-400 mt-1">Cetak QR Code ini dan letakkan di meja penerima tamu atau area acara.</p>
+            <h1 class="text-2xl font-bold mt-1">Buat QR Code Photobooth</h1>
+            <p class="text-xs text-gray-400 mt-1">Isi detail acara dan kuota, lalu generate QR untuk tamu.</p>
         </div>
 
-        <!-- Kotak Tempat QR Code Muncul -->
-        <div class="bg-white p-6 rounded-xl inline-block shadow-inner mx-auto">
-            <div id="qrcode" class="flex justify-center items-center"></div>
+        <!-- Form Input -->
+        <div class="space-y-4 text-left text-sm">
+            <div>
+                <label class="block text-xs font-medium text-gray-300 mb-1">Nama Objek / Pengantin:</label>
+                <input type="text" id="coupleNameInput" value="Agung & Hera" class="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-pink-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-300 mb-1">Kode Barcode / Meja / Sesi:</label>
+                <input type="text" id="barcodeIdInput" value="VIP-TAMU-01" class="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-pink-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-300 mb-1">Kuota Foto Per Tamu:</label>
+                <input type="number" id="quotaInput" value="3" min="1" max="20" class="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-pink-500">
+            </div>
+
+            <button onclick="generateCustomQR()" class="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-semibold py-3 rounded-xl shadow-lg transition active:scale-95">
+                Generate QR Code 🖨️
+            </button>
         </div>
 
-        <div class="space-y-2 text-sm">
-            <p class="text-gray-300 font-medium">Link Akses Langsung:</p>
-            <input type="text" id="appUrl" readonly class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-center text-xs text-pink-300 select-all">
+        <!-- Hasil QR Code & Link -->
+        <div id="resultSection" class="hidden space-y-4 pt-4 border-t border-gray-800 text-center">
+            <div class="bg-white p-4 rounded-xl inline-block shadow-inner mx-auto">
+                <div id="qrcode" class="flex justify-center items-center"></div>
+            </div>
+            
+            <div class="space-y-1 text-left">
+                <label class="block text-xs text-gray-400">Link Akses Sesi Ini:</label>
+                <input type="text" id="generatedLink" readonly class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs text-pink-300 select-all">
+            </div>
+
+            <a id="directLinkBtn" href="#" target="_blank" class="block w-full bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-semibold text-gray-200 transition text-center">
+                Buka Halaman Kamera Langsung ↗
+            </a>
         </div>
 
-        <div class="pt-2 flex flex-col space-y-3">
-            <a href="/admin-gallery.html" target="_blank" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-semibold text-sm transition shadow-lg">
+        <div class="pt-2 border-t border-gray-800">
+            <a href="/admin-gallery.html" target="_blank" class="block text-center w-full bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-semibold transition shadow-lg">
                 Buka Galeri Foto Masuk 📸
             </a>
-            <button onclick="window.print()" class="w-full bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs text-gray-300 transition">
-                Cetak Halaman Ini 🖨️
-            </button>
         </div>
     </div>
 
     <script>
-        // Otomatis mengambil domain website saat ini (misal: https://xxx.up.railway.app/)
-        const currentDomain = window.location.origin;
-        const targetUrl = currentDomain + '/index.html';
+        async function generateCustomQR() {
+            const coupleName = document.getElementById('coupleNameInput').value.trim();
+            const barcodeId = document.getElementById('barcodeIdInput').value.trim();
+            const quota = document.getElementById('quotaInput').value;
 
-        // Tampilkan link di text input
-        document.getElementById('appUrl').value = targetUrl;
+            if (!coupleName || !barcodeId) {
+                alert('Nama pengantin dan kode barcode wajib diisi!');
+                return;
+            }
 
-        // Generate QR Code otomatis berdasarkan link domain aktif
-        document.getElementById('qrcode').innerHTML = ""; // Bersihkan dulu jika ada
-        new QRCode(document.getElementById("qrcode"), {
-            text: targetUrl,
-            width: 220,
-            height: 220,
-            colorDark : "#000000",
-            colorLight : "#ffffff",
-            correctLevel : QRCode.CorrectLevel.H
-        });
+            try {
+                // Kirim data konfigurasi ke server untuk disimpan sementara pada sesi admin
+                const res = await fetch('/api/admin/create-session-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ coupleName, barcodeId, quota })
+                });
+                const result = await res.json();
+
+                if (result.success) {
+                    // Buat link unik menuju halaman kamera dengan membawa parameter konfigurasi sesi
+                    const targetUrl = `${window.location.origin}/capture.html?session=${result.sessionId}`;
+                    
+                    document.getElementById('generatedLink').value = targetUrl;
+                    document.getElementById('directLinkBtn').href = targetUrl;
+
+                    // Render QR Code
+                    document.getElementById('qrcode').innerHTML = "";
+                    new QRCode(document.getElementById("qrcode"), {
+                        text: targetUrl,
+                        width: 200,
+                        height: 200,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+
+                    document.getElementById('resultSection').classList.remove('hidden');
+                } else {
+                    alert('Gagal membuat sesi QR.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Terjadi kesalahan koneksi ke server.');
+            }
+        }
     </script>
 </body>
 </html>
