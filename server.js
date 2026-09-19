@@ -84,3 +84,22 @@ app.get('/api/admin/photos', (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server photobooth berjalan di port ${PORT}`);
 });
+// Endpoint untuk admin membuat konfigurasi sesi QR baru dari form
+app.post('/api/admin/create-session-config', (req, res) => {
+    const { coupleName, barcodeId, quota } = req.body;
+    
+    // Simpan nama pengantin global agar halaman depan ikut berubah jika diperlukan
+    globalCoupleName = coupleName || "Agung & Hera";
+
+    const sessionId = 'admin_cfg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    
+    sessions[sessionId] = {
+        coupleName: coupleName,
+        barcode: barcodeId,
+        quota: parseInt(quota) || 3,
+        usedQuota: 0,
+        createdAt: new Date()
+    };
+
+    res.json({ success: true, sessionId: sessionId });
+});
