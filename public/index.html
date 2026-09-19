@@ -2,42 +2,54 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Photobooth Tamu Undangan</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        html, body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #000;
+        }
+    </style>
 </head>
-<body class="bg-gradient-to-br from-gray-900 via-purple-950 to-black text-white min-h-[100dvh] flex flex-col justify-center items-center p-6">
+<body class="bg-gradient-to-br from-gray-950 via-purple-950 to-black text-white min-h-[100dvh] flex flex-col justify-center items-center p-6">
 
-    <div class="w-full max-w-sm bg-gray-900/80 backdrop-blur-md p-6 rounded-2xl shadow-2xl border border-gray-800 text-center space-y-6">
+    <div class="w-full max-w-sm bg-gray-900/90 backdrop-blur-md p-6 rounded-3xl shadow-2xl border border-gray-800 text-center space-y-6">
         <div>
-            <span class="text-xs uppercase tracking-widest text-pink-400 font-semibold">Photobooth Digital</span>
-            <h1 class="text-2xl font-bold mt-1 text-white">Agung & Hera</h1>
-            <p class="text-xs text-gray-400 mt-1">Silakan masukkan nama Anda untuk mulai berfoto.</p>
+            <span class="text-[10px] uppercase tracking-widest text-pink-400 font-bold px-3 py-1 bg-pink-500/10 rounded-full border border-pink-500/20">Photobooth Digital</span>
+            <h1 class="text-2xl font-bold mt-3 text-white">Selamat Datang! ✨</h1>
+            <p class="text-xs text-gray-400 mt-1">Silakan masukkan nama Anda untuk mulai berfoto dan mendapatkan kuota eksklusif.</p>
         </div>
 
         <div class="space-y-4 text-left">
             <div>
-                <label class="block text-xs font-medium text-gray-300 mb-1">Nama Lengkap Anda:</label>
-                <input type="text" id="guestNameInput" placeholder="Contoh: Budi Santoso" class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-pink-500 text-sm">
+                <label class="block text-xs font-semibold text-gray-300 mb-1.5">Nama Lengkap Anda:</label>
+                <input type="text" id="guestNameInput" placeholder="Contoh: Andi Pratama" class="w-full px-4 py-3.5 bg-gray-800 border border-gray-700 rounded-2xl text-white focus:outline-none focus:border-pink-500 text-sm shadow-inner transition">
             </div>
             
             <input type="hidden" id="barcodeInput" value="TAMU-UTAMA">
 
-            <button onclick="startPhotoboothSession()" class="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-semibold py-3.5 rounded-xl shadow-lg transition active:scale-95 text-sm">
-                Mulai Ambil Foto 📸
+            <button onclick="startPhotoboothSession()" class="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-semibold py-4 rounded-2xl shadow-lg shadow-pink-600/30 transition active:scale-95 text-sm flex items-center justify-center space-x-2">
+                <span>Mulai Ambil Foto</span>
+                <span class="text-base">📸</span>
             </button>
         </div>
 
-        <p class="text-[11px] text-gray-500">Setiap tamu mendapat jatah 3x foto gratis.</p>
+        <p class="text-[11px] text-gray-500">Setiap tamu mendapatkan jatah sesi foto personal.</p>
     </div>
 
     <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code') || 'TAMU-UTAMA';
+        document.getElementById('barcodeInput').value = code;
+
         async function startPhotoboothSession() {
             const guestName = document.getElementById('guestNameInput').value.trim();
             const barcodeId = document.getElementById('barcodeInput').value;
 
             if (!guestName) {
                 alert('Mohon masukkan nama Anda terlebih dahulu!');
+                document.getElementById('guestNameInput').focus();
                 return;
             }
 
@@ -50,13 +62,14 @@
                 const result = await res.json();
                 
                 if (result.success) {
+                    // Lempar ke halaman kamera dengan membawa ID sesi unik tamu tersebut
                     window.location.href = `/capture.html?session=${result.sessionId}`;
                 } else {
-                    alert(result.message);
+                    alert(result.message || 'Gagal mendaftarkan sesi.');
                 }
             } catch (err) {
                 console.error(err);
-                alert('Terjadi kesalahan koneksi.');
+                alert('Terjadi kesalahan koneksi ke server.');
             }
         }
     </script>
