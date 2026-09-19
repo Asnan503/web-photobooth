@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Photobooth Kamera Tamu</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Filter CSS untuk Preview & Canvas */
+        .filter-normal { filter: none; }
+        .filter-grayscale { filter: grayscale(100%); }
+        .filter-sepia { filter: sepia(80%); }
+        .filter-vintage { filter: contrast(120%) brightness(90%) sepia(40%); }
+        .filter-bright { filter: brightness(125%) saturate(120%); }
+    </style>
+</head>
+<body class="bg-black text-white flex flex-col h-screen justify-between overflow-hidden">
+
+    <!-- Header Info -->
+    <header class="p-4 bg-gray-900 flex justify-between items-center text-sm border-b border-gray-800">
+        <div>
+            <h1 id="coupleTitle" class="font-bold text-base truncate max-w-[200px]">Memuat...</h1>
+            <p class="text-xs text-gray-400">Barcode: <span id="barcodeText">-</span></p>
+        </div>
+        <div class="bg-blue-600 px-3 py-1 rounded-full text-xs font-semibold">
+            Sisa Kuota: <span id="quotaCount">0</span>
+        </div>
+    </header>
+
+    <!-- Kamera Viewport & Bingkai -->
+    <main class="relative flex-1 flex items-center justify-center bg-black overflow-hidden">
+        <div id="cameraContainer" class="relative w-full h-full flex items-center justify-center">
+            <!-- Video Stream Kamera HP -->
+            <video id="video" autoplay playsinline muted class="absolute w-full h-full object-cover filter-normal"></video>
+            
+            <!-- Layer Bingkai Transparan di atas Kamera -->
+            <div id="frameOverlay" class="absolute inset-0 pointer-events-none border-[16px] border-transparent box-border z-10 flex flex-col justify-between p-4">
+                <div class="flex justify-between items-start">
+                    <span id="frameTopLeft" class="text-xs bg-black/50 px-2 py-1 rounded text-white/80"></span>
+                </div>
+                <div class="flex justify-between items-end">
+                    <span id="frameBottomLeft" class="text-xs bg-black/50 px-2 py-1 rounded text-white/80"></span>
+                </div>
+            </div>
+
+            <!-- Countdown Overlay -->
+            <div id="countdown" class="absolute inset-0 bg-black/60 flex items-center justify-center text-7xl font-bold z-30 hidden">3</div>
+        </div>
+
+        <!-- Canvas Tersembunyi untuk Proses Capture Foto -->
+        <canvas id="canvas" class="hidden"></canvas>
+    </main>
+
+    <!-- Panel Kontrol (Filter, Frame, Tombol Shutter) -->
+    <footer class="bg-gray-900 p-4 space-y-3">
+        <!-- Pilihan Filter -->
+        <div class="flex space-x-2 overflow-x-auto pb-1 text-xs">
+            <button onclick="setFilter('filter-normal', this)" class="filter-btn px-3 py-1 bg-blue-600 rounded-full whitespace-nowrap">Normal</button>
+            <button onclick="setFilter('filter-grayscale', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">B&W</button>
+            <button onclick="setFilter('filter-sepia', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Sepia</button>
+            <button onclick="setFilter('filter-vintage', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Vintage</button>
+            <button onclick="setFilter('filter-bright', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Glow</button>
+        </div>
+
+        <!-- Pilihan Bingkai -->
+        <div class="flex space-x-2 overflow-x-auto pb-1 text-xs">
+            <button onclick="setFrame('minimalist')" class="frame-btn px-3 py-1 bg-blue-600 rounded-full whitespace-nowrap">Minimalis</button>
+            <button onclick="setFrame('romantic')" class="frame-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Romantic Love</button>
+            <button onclick="setFrame('elegant')" class="frame-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Gold Elegant</button>
+        </div>
+
+        <!-- Tombol Shutter / Ambil Gambar -->
+        <div class="flex justify-center items-center pt-2">
+            <button id="captureBtn" onclick="startCountdown()" class="w-16 h-16 bg-white rounded-full border-4 border-gray-400 flex items-center justify-center shadow-lg active:scale-95 transition">
+                <div class="w-12 h-12 bg-red-600 rounded-full"></div>
+            </button>
+        </div>
+    </footer>
+
+    <!-- Modal Hasil Foto -->
+    <div id="resultModal" class="fixed inset-0 bg-black/90 z-50 hidden flex flex-col items-center justify-center p-4">
+        <h2 class="text-lg font-bold mb-3">Foto Berhasil Diambil! 🎉</h2>
+        <img id="resultImage" class="max-h-[60vh] rounded-lg shadow-lg mb-4 border border-gray-700">
+        <div class="flex space-x-4 w-full max-w-xs">
+            <button onclick="downloadPhoto()" class="flex-1 bg-green-600 py-3 rounded-lg font-semibold text-sm">Download</button>
+            <button onclick="closeModal()" class="flex-1 bg-gray-700 py-3 rounded-lg font-semibold text-sm">Ambil Lagi</button>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session');
+        
+        let currentFilter = 'filter-normal';
+        let currentFrameData = { name: 'Minimalis', color: 'border-white/20' };
+        let sessionData = {};
+        let localImageData = '';
+
+        async function initSession() {
+            if (!sessionId) {
+                alert('Sesi QR tidak valid.');
+                return;
+            }
+            try {
+                const res = await fetch(`/api/session/${sessionId}`);
+                const result = await res.json();
+                if (result.success) {
+                    sessionData = result.data;
+                    document.getElementById('coupleTitle').innerText = sessionData.coupleName;
+                    document.getElementById('barcodeText').innerText = sessionData.barcode;
+                    updateQuotaDisplay();
+                    initCamera();
+                } else {
+                    alert(result.message);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function updateQuotaDisplay() {
+            const remaining = sessionData.quota - sessionData.usedQuota;
+            document.getElementById('quotaCount').innerText = remaining;
+            if (remaining <= 0) {
+                document.getElementById('captureBtn').disabled = true;
+                document.getElementById('captureBtn').classList.add('opacity-50');
+                alert('Kuota pengambilan foto Anda sudah habis.');
+            }
+        }
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false
+                });
+                document.getElementById('video').srcObject = stream;
+            } catch (err) {
+                alert('Gagal mengakses kamera HP. Pastikan Anda memberi izin akses kamera (Permission).');
+                console.error(err);
+            }
+        }
+
+        function setFilter(filterClass, btn) {
+            currentFilter = filterClass;
+            const video = document.getElementById('video');
+            video.className = `absolute w-full h-full object-cover ${filterClass}`;
+            
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.replace('bg-blue-600', 'bg-gray-700'));
+            btn.classList.replace('bg-gray-700', 'bg-blue-600');
+        }
+
+        function setFrame(type) {
+            const overlay = document.getElementById('frameOverlay');
+            document.querySelectorAll('.frame-btn').forEach(b => b.classList.replace('bg-blue-600', 'bg-gray-700'));
+            event.target.classList.replace('bg-gray-700', 'bg-blue-600');
+
+            if (type === 'minimalist') {
+                overlay.className = "absolute inset-0 pointer-events-none border-[12px] border-white/80 box-border z-10 flex flex-col justify-between p-4";
+                document.getElementById('frameTopLeft').innerText = sessionData.coupleName;
+                document.getElementById('frameBottomLeft').innerText = `ID: ${sessionData.barcode}`;
+            } else if (type === 'romantic') {
+                overlay.className = "absolute inset-0 pointer-events-none border-[16px] border-pink-500/50 box-border z-10 flex flex-col justify-between p-4";
+                document.getElementById('frameTopLeft').innerText = "❤️ " + sessionData.coupleName;
+                document.getElementById('frameBottomLeft').innerText = `Code: ${sessionData.barcode}`;
+            } else if (type === 'elegant') {
+                overlay.className = "absolute inset-0 pointer-events-none border-[16px] border-yellow-500/60 box-border z-10 flex flex-col justify-between p-4";
+                document.getElementById('frameTopLeft').innerText = "✨ " + sessionData.coupleName;
+                document.getElementById('frameBottomLeft').innerText = `VIP - ${sessionData.barcode}`;
+            }
+        }
+
+        function startCountdown() {
+            if (sessionData.usedQuota >= sessionData.quota) return;
+
+            const countdownEl = document.getElementById('countdown');
+            countdownEl.classList.remove('hidden');
+            let count = 3;
+            countdownEl.innerText = count;
+
+            const timer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownEl.innerText = count;
+                } else {
+                    clearInterval(timer);
+                    countdownEl.classList.add('hidden');
+                    takePhoto();
+                }
+            }, 1000);
+        }
+
+        function takePhoto() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            canvas.width = video.videoWidth || 1280;
+            canvas.height = video.videoHeight || 720;
+            const ctx = canvas.getContext('2d');
+
+            // Terapkan Filter pada Canvas
+            ctx.filter = window.getComputedStyle(video).filter;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Render Teks / Bingkai Sederhana ke atas Canvas
+            ctx.filter = 'none';
+            ctx.font = 'bold 32px Arial';
+            ctx.fillStyle = 'white';
+            ctx.shadowColor = 'black';
+            ctx.shadowBlur = 8;
+            ctx.fillText(sessionData.coupleName, 50, 70);
+            ctx.font = '24px Arial';
+            ctx.fillText(`Barcode: ${sessionData.barcode}`, 50, canvas.height - 40);
+
+            localImageData = canvas.toDataURL('image/jpeg', 0.9);
+
+            // Tampilkan Modal Hasil
+            document.getElementById('resultImage').src = localImageData;
+            document.getElementById('resultModal').classList.remove('hidden');
+
+            // Kirim ke Server
+            uploadPhotoToServer(localImageData);
+        }
+
+        async function uploadPhotoToServer(base64) {
+            try {
+                const res = await fetch('/api/upload-photo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId, imageBase64: base64 })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    sessionData.usedQuota += 1;
+                    updateQuotaDisplay();
+                } else {
+                    alert(result.message);
+                }
+            } catch (err) {
+                console.error('Gagal mengunggah foto:', err);
+            }
+        }
+
+        function downloadPhoto() {
+            const a = document.createElement('a');
+            a.href = localImageData;
+            a.download = `photobooth-${sessionData.barcode}-${Date.now()}.jpg`;
+            a.click();
+        }
+
+        function closeModal() {
+            document.getElementById('resultModal').classList.add('hidden');
+        }
+
+        // Set default frame text on load
+        window.onload = () => {
+            initSession();
+            setTimeout(() => {
+                document.getElementById('frameTopLeft').innerText = sessionData.coupleName || '';
+                document.getElementById('frameBottomLeft').innerText = sessionData.barcode ? `ID: ${sessionData.barcode}` : '';
+            }, 500);
+        };
+    </script>
+</body>
+</html>
