@@ -66,7 +66,7 @@ app.post('/api/admin/create-session-config', (req, res) => {
     res.json({ success: true, sessionId: sessionId });
 });
 
-// API Upload Foto ke Server Lokal (Aman & Stabil)
+// API Upload Foto ke Server Lokal (Sudah Diperbaiki)
 app.post('/api/upload-photo', (req, res) => {
     const { sessionId, imageBase64 } = req.body;
     const session = sessions[sessionId];
@@ -75,7 +75,7 @@ app.post('/api/upload-photo', (req, res) => {
         return res.json({ success: false, message: 'Sesi tidak ditemukan.' });
     }
     if (session.usedQuota >= session.quota) {
-        return.json({ success: false, message: 'Kuota foto Anda sudah habis!' });
+        return res.json({ success: false, message: 'Kuota foto Anda sudah habis!' });
     }
 
     try {
