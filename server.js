@@ -7,18 +7,15 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Pastikan folder uploads ada
 const uploadDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)){
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Database Memori Sementara
 const sessions = {};
 global.allPhotos = global.allPhotos || [];
-let globalCoupleName = "Agung & Hera"; // Nama default pengantin
+let globalCoupleName = "Agung & Hera";
 
-// API untuk mendaftarkan tamu secara dinamis dari halaman depan
 app.post('/api/register-guest', (req, res) => {
     const { guestName, barcodeId } = req.body;
     if (!guestName) {
@@ -30,7 +27,7 @@ app.post('/api/register-guest', (req, res) => {
     sessions[sessionId] = {
         coupleName: globalCoupleName,
         barcode: `${barcodeId} - ${guestName}`,
-        quota: 3, // Jatah 3 foto per tamu
+        quota: 3,
         usedQuota: 0,
         createdAt: new Date()
     };
@@ -38,25 +35,23 @@ app.post('/api/register-guest', (req, res) => {
     res.json({ success: true, sessionId: sessionId });
 });
 
-// API untuk mengambil data sesi tamu
 app.get('/api/session/:id', (req, res) => {
     const session = sessions[req.params.id];
     if (!session) {
-        return.json({ success: false, message: 'Sesi tidak ditemukan atau sudah kadaluarsa.' });
+        return res.json({ success: false, message: 'Sesi tidak ditemukan atau sudah kadaluarsa.' });
     }
     res.json({ success: true, data: session });
 });
 
-// API untuk mengunggah dan menyimpan foto fisik ke server
 app.post('/api/upload-photo', (req, res) => {
     const { sessionId, imageBase64 } = req.body;
     const session = sessions[sessionId];
     
     if (!session) {
-        return.json({ success: false, message: 'Sesi tidak ditemukan.' });
+        return res.json({ success: false, message: 'Sesi tidak ditemukan.' });
     }
     if (session.usedQuota >= session.quota) {
-        return.json({ success: false, message: 'Kuota foto Anda sudah habis!' });
+        return res.json({ success: false, message: 'Kuota foto Anda sudah habis!' });
     }
 
     try {
@@ -82,7 +77,6 @@ app.post('/api/upload-photo', (req, res) => {
     }
 });
 
-// API untuk galeri admin
 app.get('/api/admin/photos', (req, res) => {
     res.json({ success: true, photos: global.allPhotos });
 });
