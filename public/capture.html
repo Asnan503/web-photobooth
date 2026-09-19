@@ -71,6 +71,36 @@
             color: rgba(255,255,255,0.85) !important;
         }
 
+        /* ===== Bingkai tema pernikahan (nama pasangan + tanggal di dalam bingkai) =====
+           Warna diatur lewat CSS variable yang di-set oleh setFrame() dari WEDDING_FRAMES */
+        .wf {
+            border: var(--wf-w, 16px) solid var(--wf-border, #c9a24b);
+            box-shadow: inset 0 0 0 3px var(--wf-inner, #f6e7b4);
+            align-items: center;
+            justify-content: flex-start !important;
+            padding-top: calc(var(--safe-t) + 40px) !important;
+            gap: 2px;
+        }
+        .wf > div {
+            width: 100%;
+            justify-content: center !important;
+        }
+        .wf span {
+            background: transparent !important;
+            color: var(--wf-text, #fff) !important;
+            padding: 0 !important;
+            display: block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-align: center;
+            font-family: Georgia, "Times New Roman", serif;
+            text-shadow: 0 1px 6px rgba(0,0,0,0.75);
+        }
+        .wf #frameTopLeft    { font-size: 17px; font-weight: 700; }
+        .wf #frameBottomLeft { font-size: 12px; font-style: italic; }
+
         /* Carousel filter bergaya kamera bawaan: lingkaran + label di bawah */
         .filter-item { scroll-snap-align: center; }
         .filter-swatch {
@@ -156,6 +186,13 @@
             <button onclick="setFrame('romantic')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">Romantic</button>
             <button onclick="setFrame('elegant')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">Elegant</button>
             <button onclick="setFrame('rustic')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">Rustic</button>
+            <!-- Bingkai tema pernikahan (nama pasangan + tanggal) -->
+            <button onclick="setFrame('wedding_gold')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">💍 Wedding Gold</button>
+            <button onclick="setFrame('wedding_blush')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">🌸 Blush Floral</button>
+            <button onclick="setFrame('wedding_ivory')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">🤍 Ivory Classic</button>
+            <button onclick="setFrame('wedding_sage')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">🌿 Sage Garden</button>
+            <button onclick="setFrame('wedding_navy')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">💙 Royal Navy</button>
+            <button onclick="setFrame('wedding_rose')" class="frame-btn px-3 py-1.5 bg-gray-700 rounded-full whitespace-nowrap text-[11px] shrink-0">🌹 Rose Gold</button>
         </div>
 
         <!-- Carousel Filter, gaya kamera bawaan -->
@@ -256,6 +293,29 @@
         let currentFacingMode = 'user'; // 'user' untuk depan, 'environment' untuk belakang
         let currentStream = null;
 
+        // Ubah ke true jika suatu saat ingin mengaktifkan kembali hitung mundur 3 detik
+        const USE_COUNTDOWN = false;
+
+        // Bingkai yang sedang dipilih (default sama dengan tombol aktif awal: Minimalis)
+        let currentFrame = 'minimalist';
+
+        // ===== Konfigurasi bingkai tema pernikahan =====
+        // width = tebal border (px), border = warna border, inner = garis tipis di sisi dalam,
+        // text = warna tulisan, deco = ornamen kiri-kanan nama pasangan
+        const WEDDING_FRAMES = {
+            wedding_gold:  { width: 18, border: '#c9a24b',                inner: '#f6e7b4', text: '#fdf3cf', deco: '✦' },
+            wedding_blush: { width: 16, border: 'rgba(244,166,190,0.85)', inner: '#ffffff', text: '#ffffff', deco: '✿' },
+            wedding_ivory: { width: 16, border: 'rgba(250,245,230,0.95)', inner: '#c9a24b', text: '#ffffff', deco: '❦' },
+            wedding_sage:  { width: 16, border: 'rgba(122,150,110,0.88)', inner: '#f1f5e9', text: '#ffffff', deco: '❀' },
+            wedding_navy:  { width: 18, border: 'rgba(20,33,68,0.94)',    inner: '#d4af37', text: '#f3dc8a', deco: '❖' },
+            wedding_rose:  { width: 16, border: 'rgba(183,110,121,0.90)', inner: '#f9d9d0', text: '#fff1ec', deco: '❤' }
+        };
+
+        // Tanggal hari ini (tanggal pengambilan foto), format Indonesia: 19 September 2026
+        function getTodayLabel() {
+            return new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+        }
+
         async function initSession() {
             if (!sessionId) {
                 alert('Sesi tidak valid, silakan mulai dari halaman utama.');
@@ -329,6 +389,10 @@
 
         function setFrame(type) {
             const overlay = document.getElementById('frameOverlay');
+            // Reset variabel warna bingkai pernikahan sebelumnya (jika ada)
+            overlay.removeAttribute('style');
+            currentFrame = type;
+
             document.querySelectorAll('.frame-btn').forEach(b => b.classList.replace('bg-blue-600', 'bg-gray-700'));
             event.target.classList.replace('bg-gray-700', 'bg-blue-600');
 
@@ -348,11 +412,74 @@
                 overlay.className = "absolute inset-0 pointer-events-none border-[16px] border-amber-800/70 box-border z-10 flex flex-col justify-between p-3";
                 document.getElementById('frameTopLeft').innerText = "🌿 " + sessionData.coupleName;
                 document.getElementById('frameBottomLeft').innerText = `Rustic - ${sessionData.barcode}`;
+            } else if (WEDDING_FRAMES[type]) {
+                // Bingkai pernikahan: nama pasangan (dari header kamera) + tanggal hari ini
+                const cfg = WEDDING_FRAMES[type];
+                overlay.className = "absolute inset-0 pointer-events-none box-border z-10 flex flex-col p-3 wf";
+                overlay.style.setProperty('--wf-w', cfg.width + 'px');
+                overlay.style.setProperty('--wf-border', cfg.border);
+                overlay.style.setProperty('--wf-inner', cfg.inner);
+                overlay.style.setProperty('--wf-text', cfg.text);
+                document.getElementById('frameTopLeft').innerText = `${cfg.deco} ${sessionData.coupleName || ''} ${cfg.deco}`;
+                document.getElementById('frameBottomLeft').innerText = getTodayLabel();
             }
+        }
+
+        // Menggambar bingkai pernikahan (border, garis dalam, nama pasangan, tanggal) ke canvas hasil foto
+        function drawWeddingFrame(ctx, w, h, cfg, coupleName, dateText) {
+            const s = Math.min(w, h) / 390; // skala relatif terhadap lebar layar HP
+            const b = cfg.width * s;        // tebal border
+            const l = 3 * s;                // tebal garis dalam
+
+            ctx.save();
+            ctx.shadowBlur = 0;
+
+            // Border utama
+            ctx.lineWidth = b;
+            ctx.strokeStyle = cfg.border;
+            ctx.strokeRect(b / 2, b / 2, w - b, h - b);
+
+            // Garis tipis di sisi dalam border
+            ctx.lineWidth = l;
+            ctx.strokeStyle = cfg.inner;
+            ctx.strokeRect(b + l / 2, b + l / 2, w - 2 * b - l, h - 2 * b - l);
+
+            // Nama pasangan (otomatis mengecil jika terlalu panjang)
+            const title = `${cfg.deco} ${coupleName || ''} ${cfg.deco}`;
+            const maxW = w - 2 * b - 40 * s;
+            let size = 24 * s;
+            const serif = 'Georgia, "Times New Roman", serif';
+            ctx.font = `bold ${size}px ${serif}`;
+            while (ctx.measureText(title).width > maxW && size > 10 * s) {
+                size -= 1;
+                ctx.font = `bold ${size}px ${serif}`;
+            }
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = cfg.text;
+            ctx.shadowColor = 'rgba(0,0,0,0.7)';
+            ctx.shadowBlur = 8 * s;
+
+            const cx = w / 2;
+            const y = b + l + 16 * s;
+            ctx.fillText(title, cx, y);
+
+            // Tanggal pengambilan foto
+            ctx.font = `italic ${15 * s}px ${serif}`;
+            ctx.fillText(dateText, cx, y + size + 6 * s);
+
+            ctx.restore();
         }
 
         function startCountdown() {
             if (sessionData.usedQuota >= sessionData.quota) return;
+
+            // Hitung mundur dimatikan: langsung ambil foto saat tombol ditekan
+            if (!USE_COUNTDOWN) {
+                takePhoto();
+                return;
+            }
 
             const countdownEl = document.getElementById('countdown');
             countdownEl.classList.remove('hidden');
@@ -383,13 +510,19 @@
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             ctx.filter = 'none';
-            ctx.font = 'bold 32px Arial';
-            ctx.fillStyle = 'white';
-            ctx.shadowColor = 'black';
-            ctx.shadowBlur = 8;
-            ctx.fillText(sessionData.coupleName, 50, 70);
-            ctx.font = '24px Arial';
-            ctx.fillText(`Tamu: ${sessionData.barcode}`, 50, canvas.height - 40);
+
+            if (WEDDING_FRAMES[currentFrame]) {
+                // Bingkai pernikahan: nama pasangan + tanggal pengambilan ikut tercetak di foto
+                drawWeddingFrame(ctx, canvas.width, canvas.height, WEDDING_FRAMES[currentFrame], sessionData.coupleName, getTodayLabel());
+            } else {
+                ctx.font = 'bold 32px Arial';
+                ctx.fillStyle = 'white';
+                ctx.shadowColor = 'black';
+                ctx.shadowBlur = 8;
+                ctx.fillText(sessionData.coupleName, 50, 70);
+                ctx.font = '24px Arial';
+                ctx.fillText(`Tamu: ${sessionData.barcode}`, 50, canvas.height - 40);
+            }
 
             localImageData = canvas.toDataURL('image/jpeg', 0.9);
             document.getElementById('resultImage').src = localImageData;
