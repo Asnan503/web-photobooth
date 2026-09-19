@@ -6,7 +6,6 @@
     <title>Photobooth Kamera Tamu</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Filter CSS untuk Preview & Canvas */
         .filter-normal { filter: none; }
         .filter-grayscale { filter: grayscale(100%); }
         .filter-sepia { filter: sepia(80%); }
@@ -14,47 +13,42 @@
         .filter-bright { filter: brightness(125%) saturate(120%); }
     </style>
 </head>
-<body class="bg-black text-white flex flex-col h-screen justify-between overflow-hidden">
+<body class="bg-black text-white flex flex-col h-[100dvh] justify-between overflow-hidden">
 
     <!-- Header Info -->
-    <header class="p-4 bg-gray-900 flex justify-between items-center text-sm border-b border-gray-800">
+    <header class="p-3 bg-gray-900 flex justify-between items-center text-sm border-b border-gray-800 shrink-0 z-20">
         <div>
-            <h1 id="coupleTitle" class="font-bold text-base truncate max-w-[200px]">Memuat...</h1>
-            <p class="text-xs text-gray-400">Barcode: <span id="barcodeText">-</span></p>
+            <h1 id="coupleTitle" class="font-bold text-sm truncate max-w-[200px]">Memuat...</h1>
+            <p class="text-[11px] text-gray-400">Barcode: <span id="barcodeText">-</span></p>
         </div>
         <div class="bg-blue-600 px-3 py-1 rounded-full text-xs font-semibold">
-            Sisa Kuota: <span id="quotaCount">0</span>
+            Kuota: <span id="quotaCount">0</span>
         </div>
     </header>
 
     <!-- Kamera Viewport & Bingkai -->
-    <main class="relative flex-1 flex items-center justify-center bg-black overflow-hidden">
+    <main class="relative flex-1 flex items-center justify-center bg-black overflow-hidden my-auto">
         <div id="cameraContainer" class="relative w-full h-full flex items-center justify-center">
-            <!-- Video Stream Kamera HP -->
             <video id="video" autoplay playsinline muted class="absolute w-full h-full object-cover filter-normal"></video>
             
-            <!-- Layer Bingkai Transparan di atas Kamera -->
-            <div id="frameOverlay" class="absolute inset-0 pointer-events-none border-[16px] border-transparent box-border z-10 flex flex-col justify-between p-4">
+            <div id="frameOverlay" class="absolute inset-0 pointer-events-none border-[12px] border-white/80 box-border z-10 flex flex-col justify-between p-3">
                 <div class="flex justify-between items-start">
-                    <span id="frameTopLeft" class="text-xs bg-black/50 px-2 py-1 rounded text-white/80"></span>
+                    <span id="frameTopLeft" class="text-[11px] bg-black/50 px-2 py-0.5 rounded text-white/90"></span>
                 </div>
                 <div class="flex justify-between items-end">
-                    <span id="frameBottomLeft" class="text-xs bg-black/50 px-2 py-1 rounded text-white/80"></span>
+                    <span id="frameBottomLeft" class="text-[11px] bg-black/50 px-2 py-0.5 rounded text-white/90"></span>
                 </div>
             </div>
 
-            <!-- Countdown Overlay -->
             <div id="countdown" class="absolute inset-0 bg-black/60 flex items-center justify-center text-7xl font-bold z-30 hidden">3</div>
         </div>
-
-        <!-- Canvas Tersembunyi untuk Proses Capture Foto -->
         <canvas id="canvas" class="hidden"></canvas>
     </main>
 
     <!-- Panel Kontrol (Filter, Frame, Tombol Shutter) -->
-    <footer class="bg-gray-900 p-4 space-y-3">
+    <footer class="bg-gray-900 p-3 space-y-2 shrink-0 z-20 shadow-2xl">
         <!-- Pilihan Filter -->
-        <div class="flex space-x-2 overflow-x-auto pb-1 text-xs">
+        <div class="flex space-x-2 overflow-x-auto pb-1 text-xs no-scrollbar">
             <button onclick="setFilter('filter-normal', this)" class="filter-btn px-3 py-1 bg-blue-600 rounded-full whitespace-nowrap">Normal</button>
             <button onclick="setFilter('filter-grayscale', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">B&W</button>
             <button onclick="setFilter('filter-sepia', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Sepia</button>
@@ -62,17 +56,19 @@
             <button onclick="setFilter('filter-bright', this)" class="filter-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Glow</button>
         </div>
 
-        <!-- Pilihan Bingkai -->
-        <div class="flex space-x-2 overflow-x-auto pb-1 text-xs">
-            <button onclick="setFrame('minimalist')" class="frame-btn px-3 py-1 bg-blue-600 rounded-full whitespace-nowrap">Minimalis</button>
-            <button onclick="setFrame('romantic')" class="frame-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Romantic Love</button>
-            <button onclick="setFrame('elegant')" class="frame-btn px-3 py-1 bg-gray-700 rounded-full whitespace-nowrap">Gold Elegant</button>
-        </div>
+        <!-- Pilihan Bingkai & Tombol Shutter Sejajar/Aman -->
+        <div class="flex items-center justify-between pt-1">
+            <div class="flex flex-col space-y-1.5 overflow-x-auto text-xs max-w-[70%]">
+                <div class="flex space-x-2">
+                    <button onclick="setFrame('minimalist')" class="frame-btn px-2.5 py-1 bg-blue-600 rounded-full whitespace-nowrap text-[11px]">Minimalis</button>
+                    <button onclick="setFrame('romantic')" class="frame-btn px-2.5 py-1 bg-gray-700 rounded-full whitespace-nowrap text-[11px]">Romantic</button>
+                    <button onclick="setFrame('elegant')" class="frame-btn px-2.5 py-1 bg-gray-700 rounded-full whitespace-nowrap text-[11px]">Elegant</button>
+                </div>
+            </div>
 
-        <!-- Tombol Shutter / Ambil Gambar -->
-        <div class="flex justify-center items-center pt-2">
-            <button id="captureBtn" onclick="startCountdown()" class="w-16 h-16 bg-white rounded-full border-4 border-gray-400 flex items-center justify-center shadow-lg active:scale-95 transition">
-                <div class="w-12 h-12 bg-red-600 rounded-full"></div>
+            <!-- Tombol Shutter -->
+            <button id="captureBtn" onclick="startCountdown()" class="w-14 h-14 bg-white rounded-full border-4 border-gray-400 flex items-center justify-center shadow-lg active:scale-95 transition shrink-0">
+                <div class="w-10 h-10 bg-red-600 rounded-full"></div>
             </button>
         </div>
     </footer>
@@ -92,7 +88,6 @@
         const sessionId = urlParams.get('session');
         
         let currentFilter = 'filter-normal';
-        let currentFrameData = { name: 'Minimalis', color: 'border-white/20' };
         let sessionData = {};
         let localImageData = '';
 
@@ -136,7 +131,7 @@
                 });
                 document.getElementById('video').srcObject = stream;
             } catch (err) {
-                alert('Gagal mengakses kamera HP. Pastikan Anda memberi izin akses kamera (Permission).');
+                alert('Gagal mengakses kamera HP. Pastikan Anda memberi izin akses kamera.');
                 console.error(err);
             }
         }
@@ -156,15 +151,15 @@
             event.target.classList.replace('bg-gray-700', 'bg-blue-600');
 
             if (type === 'minimalist') {
-                overlay.className = "absolute inset-0 pointer-events-none border-[12px] border-white/80 box-border z-10 flex flex-col justify-between p-4";
+                overlay.className = "absolute inset-0 pointer-events-none border-[12px] border-white/80 box-border z-10 flex flex-col justify-between p-3";
                 document.getElementById('frameTopLeft').innerText = sessionData.coupleName;
                 document.getElementById('frameBottomLeft').innerText = `ID: ${sessionData.barcode}`;
             } else if (type === 'romantic') {
-                overlay.className = "absolute inset-0 pointer-events-none border-[16px] border-pink-500/50 box-border z-10 flex flex-col justify-between p-4";
+                overlay.className = "absolute inset-0 pointer-events-none border-[14px] border-pink-500/50 box-border z-10 flex flex-col justify-between p-3";
                 document.getElementById('frameTopLeft').innerText = "❤️ " + sessionData.coupleName;
                 document.getElementById('frameBottomLeft').innerText = `Code: ${sessionData.barcode}`;
             } else if (type === 'elegant') {
-                overlay.className = "absolute inset-0 pointer-events-none border-[16px] border-yellow-500/60 box-border z-10 flex flex-col justify-between p-4";
+                overlay.className = "absolute inset-0 pointer-events-none border-[14px] border-yellow-500/60 box-border z-10 flex flex-col justify-between p-3";
                 document.getElementById('frameTopLeft').innerText = "✨ " + sessionData.coupleName;
                 document.getElementById('frameBottomLeft').innerText = `VIP - ${sessionData.barcode}`;
             }
@@ -197,11 +192,9 @@
             canvas.height = video.videoHeight || 720;
             const ctx = canvas.getContext('2d');
 
-            // Terapkan Filter pada Canvas
             ctx.filter = window.getComputedStyle(video).filter;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Render Teks / Bingkai Sederhana ke atas Canvas
             ctx.filter = 'none';
             ctx.font = 'bold 32px Arial';
             ctx.fillStyle = 'white';
@@ -213,11 +206,9 @@
 
             localImageData = canvas.toDataURL('image/jpeg', 0.9);
 
-            // Tampilkan Modal Hasil
             document.getElementById('resultImage').src = localImageData;
             document.getElementById('resultModal').classList.remove('hidden');
 
-            // Kirim ke Server
             uploadPhotoToServer(localImageData);
         }
 
@@ -251,7 +242,6 @@
             document.getElementById('resultModal').classList.add('hidden');
         }
 
-        // Set default frame text on load
         window.onload = () => {
             initSession();
             setTimeout(() => {
