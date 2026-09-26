@@ -38,6 +38,9 @@
            CSS filter berlaku ke seluruh gambar (tidak bisa menyasar bibir/pipi saja tanpa deteksi wajah). */
         .filter-glam      { filter: brightness(124%) contrast(108%) saturate(150%) hue-rotate(-4deg); }
         .filter-blush     { filter: brightness(130%) saturate(138%) sepia(9%) hue-rotate(-9deg) contrast(103%); }
+        /* V.1: gaya beauty filter IG - wajah cerah, kontras dilembutkan + sedikit blur untuk menyamarkan
+           noda/jerawat (soft-focus), saturasi & hue-shift agar bibir/pipi tampak lebih merah merona. */
+        .filter-v1        { filter: brightness(118%) contrast(92%) saturate(132%) hue-rotate(-5deg) blur(0.6px); }
 
         /* Video dasar: id-level supaya tidak hilang saat JS mengganti className */
         #video {
@@ -298,6 +301,10 @@
             <button onclick="setFilter('filter-blush', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
                 <span class="filter-swatch filter-blush"></span>
                 <span class="filter-label text-[10px]">Blush</span>
+            </button>
+            <button onclick="setFilter('filter-v1', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-v1"></span>
+                <span class="filter-label text-[10px]">V.1</span>
             </button>
         </div>
 
