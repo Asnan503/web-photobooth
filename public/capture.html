@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Photobooth Kamera Tamu</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- face-api.js: deteksi wajah + 68 titik landmark, dipakai untuk filter V.1 (AI) agar efek hanya menyasar wajah/bibir -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <style>
         :root {
             --safe-t: env(safe-area-inset-top, 0px);
@@ -179,6 +181,8 @@
     <main class="absolute inset-0">
         <div id="cameraContainer" class="relative w-full h-full">
             <video id="video" autoplay playsinline muted class="absolute w-full h-full object-cover filter-normal"></video>
+            <!-- Kanvas hasil filter V.1 (AI): hanya ditampilkan saat mode face-detection aktif, menggantikan tampilan video mentah -->
+            <canvas id="aiCanvas" class="absolute w-full h-full object-cover hidden"></canvas>
 
             <div id="frameOverlay" class="absolute inset-0 pointer-events-none border-[12px] border-white/80 box-border z-10 flex flex-col p-3 cap">
                 <div class="flex justify-between items-start">
@@ -305,6 +309,10 @@
             <button onclick="setFilter('filter-v1', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
                 <span class="filter-swatch filter-v1"></span>
                 <span class="filter-label text-[10px]">V.1</span>
+            </button>
+            <button onclick="setFilter('ai-v1', this)" class="filter-item bg-gray-700 flex flex-col items-center space-y-1 shrink-0 snap-center">
+                <span class="filter-swatch filter-v1"></span>
+                <span class="filter-label text-[10px]">V.1 AI</span>
             </button>
         </div>
 
@@ -457,11 +465,202 @@
             initCamera(currentFacingMode);
         }
 
+        /* =========================================================================================
+           FILTER V.1 (AI) - deteksi wajah real-time dengan face-api.js
+           Ide: efek "cerah + halus + bibir merona" TIDAK diterapkan ke seluruh gambar (seperti filter
+           CSS biasa), melainkan hanya di area wajah (oval dari 17 titik garis rahang) dan area bibir
+           (poligon dari titik bibir luar), memakai 68 titik landmark wajah. Tepi mask di-blur (feathered)
+           supaya transisi ke kulit/latar sekitarnya halus, tidak terlihat seperti tempelan kotak.
+           ========================================================================================= */
+        const FACE_MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights';
+        let faceApiReady = false;
+        let aiFilterActive = false;
+        let lastLandmarkPts = null;   // 68 titik {x,y} terakhir dalam koordinat resolusi asli video, atau null bila wajah tak terdeteksi
+        let aiDetectTimer = null;
+        let aiRenderRaf = null;
+
+        // Kanvas kerja (offscreen) dibuat sekali saja lalu dipakai ulang tiap frame demi performa
+        const aiWork = {
+            skin: document.createElement('canvas'),
+            skinMask: document.createElement('canvas'),
+            skinMaskBlur: document.createElement('canvas'),
+            lips: document.createElement('canvas'),
+            lipsMask: document.createElement('canvas'),
+            lipsMaskBlur: document.createElement('canvas'),
+            out: document.createElement('canvas'),
+        };
+
+        async function loadFaceApiModels() {
+            try {
+                await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
+                await faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODEL_URL);
+                faceApiReady = true;
+            } catch (e) {
+                console.error('Gagal memuat model AI face-detection:', e);
+                faceApiReady = false;
+            }
+        }
+
+        function resizeAiWork(w, h) {
+            Object.values(aiWork).forEach(c => { c.width = w; c.height = h; });
+        }
+
+        // Oval wajah: sisi & bawah dari 17 titik garis rahang (indeks 0-16), bagian dahi didekati
+        // dengan lengkungan ke satu titik puncak (68-point model tidak punya titik di dahi).
+        function buildFaceOvalPath(ctx, pts) {
+            const jaw = pts.slice(0, 17);
+            const browY = Math.min(pts[19].y, pts[24].y);
+            const chinY = jaw[8].y;
+            const foreheadY = browY - (chinY - browY) * 0.85;
+            const cx = (jaw[0].x + jaw[16].x) / 2;
+            ctx.beginPath();
+            ctx.moveTo(jaw[0].x, jaw[0].y);
+            for (let i = 1; i < jaw.length; i++) ctx.lineTo(jaw[i].x, jaw[i].y);
+            ctx.quadraticCurveTo(cx, foreheadY, jaw[0].x, jaw[0].y);
+            ctx.closePath();
+        }
+
+        // Poligon bibir luar: indeks 48-59
+        function buildLipsPath(ctx, pts) {
+            const outer = pts.slice(48, 60);
+            ctx.beginPath();
+            ctx.moveTo(outer[0].x, outer[0].y);
+            for (let i = 1; i < outer.length; i++) ctx.lineTo(outer[i].x, outer[i].y);
+            ctx.closePath();
+        }
+
+        // Gambar mask putih dari path, lalu blur untuk mendapat tepi lembut (feathered)
+        function drawFeatheredMask(pathFn, pts, w, h, maskCanvas, blurCanvas, blurPx) {
+            const mctx = maskCanvas.getContext('2d');
+            mctx.clearRect(0, 0, w, h);
+            mctx.fillStyle = '#fff';
+            pathFn(mctx, pts);
+            mctx.fill();
+
+            const bctx = blurCanvas.getContext('2d');
+            bctx.clearRect(0, 0, w, h);
+            bctx.filter = `blur(${blurPx}px)`;
+            bctx.drawImage(maskCanvas, 0, 0);
+            bctx.filter = 'none';
+        }
+
+        // Menyusun satu frame "beauty" utuh (resolusi asli video) dari frame video saat ini + landmark.
+        // Bila landmark null (wajah tak terdeteksi), kembalikan video apa adanya (tanpa efek).
+        function composeBeautyFrame(videoEl, pts) {
+            const w = videoEl.videoWidth || 1280, h = videoEl.videoHeight || 720;
+            if (aiWork.out.width !== w || aiWork.out.height !== h) resizeAiWork(w, h);
+            const outCtx = aiWork.out.getContext('2d');
+            outCtx.clearRect(0, 0, w, h);
+            outCtx.filter = 'none';
+            outCtx.drawImage(videoEl, 0, 0, w, h);
+            if (!pts) return aiWork.out;
+
+            // Layer kulit: cerah + kontras dilembutkan + blur halus (samarkan noda/jerawat), dibatasi oval wajah
+            const skinCtx = aiWork.skin.getContext('2d');
+            skinCtx.clearRect(0, 0, w, h);
+            skinCtx.filter = 'brightness(116%) contrast(93%) saturate(118%) blur(2.5px)';
+            skinCtx.drawImage(videoEl, 0, 0, w, h);
+            skinCtx.filter = 'none';
+            drawFeatheredMask(buildFaceOvalPath, pts, w, h, aiWork.skinMask, aiWork.skinMaskBlur, Math.max(6, w * 0.012));
+            skinCtx.globalCompositeOperation = 'destination-in';
+            skinCtx.drawImage(aiWork.skinMaskBlur, 0, 0);
+            skinCtx.globalCompositeOperation = 'source-over';
+
+            // Layer bibir: saturasi & hue-shift agar merah merona, dibatasi poligon bibir
+            const lipsCtx = aiWork.lips.getContext('2d');
+            lipsCtx.clearRect(0, 0, w, h);
+            lipsCtx.filter = 'saturate(200%) hue-rotate(-8deg) brightness(96%) contrast(112%)';
+            lipsCtx.drawImage(videoEl, 0, 0, w, h);
+            lipsCtx.filter = 'none';
+            drawFeatheredMask(buildLipsPath, pts, w, h, aiWork.lipsMask, aiWork.lipsMaskBlur, Math.max(2, w * 0.004));
+            lipsCtx.globalCompositeOperation = 'destination-in';
+            lipsCtx.drawImage(aiWork.lipsMaskBlur, 0, 0);
+            lipsCtx.globalCompositeOperation = 'source-over';
+
+            outCtx.drawImage(aiWork.skin, 0, 0);
+            outCtx.drawImage(aiWork.lips, 0, 0);
+            return aiWork.out;
+        }
+
+        // Deteksi wajah di-throttle (tidak tiap frame) karena inference AI cukup berat untuk HP
+        async function detectFaceLoop() {
+            if (!aiFilterActive || !faceApiReady) { lastLandmarkPts = null; return; }
+            const video = document.getElementById('video');
+            if (video.readyState < 2) return;
+            try {
+                const result = await faceapi
+                    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+                    .withFaceLandmarks(true);
+                lastLandmarkPts = result ? result.landmarks.positions : null;
+            } catch (e) {
+                // Abaikan kegagalan 1 frame deteksi agar loop tidak berhenti total
+            }
+        }
+
+        // Samakan posisi & ukuran kanvas AI dengan kotak video saat ini (ikut menyesuaikan saat bingkai gambar dipilih)
+        function syncAiCanvasBox() {
+            const video = document.getElementById('video');
+            const aiCanvas = document.getElementById('aiCanvas');
+            aiCanvas.style.left = video.style.left || '0px';
+            aiCanvas.style.top = video.style.top || '0px';
+            aiCanvas.style.width = video.style.width || '100%';
+            aiCanvas.style.height = video.style.height || '100%';
+            const rect = aiCanvas.getBoundingClientRect();
+            const targetW = Math.max(1, Math.round(rect.width));
+            const targetH = Math.max(1, Math.round(rect.height));
+            if (aiCanvas.width !== targetW) aiCanvas.width = targetW;
+            if (aiCanvas.height !== targetH) aiCanvas.height = targetH;
+        }
+
+        function aiPreviewLoop() {
+            aiRenderRaf = requestAnimationFrame(aiPreviewLoop);
+            if (!aiFilterActive) { aiRenderRaf = null; return; }
+            const video = document.getElementById('video');
+            const aiCanvas = document.getElementById('aiCanvas');
+            if (video.readyState < 2) return;
+            syncAiCanvasBox();
+            const frame = composeBeautyFrame(video, lastLandmarkPts);
+            const dctx = aiCanvas.getContext('2d');
+            const cw = aiCanvas.width, ch = aiCanvas.height;
+            dctx.clearRect(0, 0, cw, ch);
+            const s = Math.max(cw / frame.width, ch / frame.height); // object-cover
+            const dw = frame.width * s, dh = frame.height * s;
+            dctx.drawImage(frame, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+        }
+
+        function startAiFilter() {
+            aiFilterActive = true;
+            document.getElementById('video').classList.add('opacity-0');
+            document.getElementById('aiCanvas').classList.remove('hidden');
+            if (!aiDetectTimer) aiDetectTimer = setInterval(detectFaceLoop, 180);
+            if (!aiRenderRaf) aiPreviewLoop();
+        }
+
+        function stopAiFilter() {
+            aiFilterActive = false;
+            document.getElementById('video').classList.remove('opacity-0');
+            document.getElementById('aiCanvas').classList.add('hidden');
+            if (aiDetectTimer) { clearInterval(aiDetectTimer); aiDetectTimer = null; }
+            lastLandmarkPts = null;
+        }
+
         function setFilter(filterClass, btn) {
             const video = document.getElementById('video');
-            video.className = `absolute w-full h-full object-cover ${filterClass}`;
             document.querySelectorAll('.filter-btn, .filter-item').forEach(b => b.classList.replace('bg-blue-600', 'bg-gray-700'));
             btn.classList.replace('bg-gray-700', 'bg-blue-600');
+
+            if (filterClass === 'ai-v1') {
+                video.className = 'absolute w-full h-full object-cover filter-normal';
+                if (!faceApiReady) {
+                    alert('Model AI wajah masih dimuat, tunggu beberapa detik lalu coba lagi.');
+                    return;
+                }
+                startAiFilter();
+                return;
+            }
+
+            stopAiFilter();
+            video.className = `absolute w-full h-full object-cover ${filterClass}`;
         }
 
         // Pilih stiker emoji (tanduk cinta, mahkota, dll). Tidak ada deteksi wajah, jadi posisinya
@@ -654,12 +853,15 @@
             const s = Math.max(hw / vw, hh / vh); // cover, sama seperti object-cover di preview
             const dw = vw * s, dh = vh * s;
 
+            // Bila filter V.1 (AI) aktif, pakai frame hasil komposit face-mask (bukan video mentah)
+            const drawSource = aiFilterActive ? composeBeautyFrame(video, lastLandmarkPts) : video;
+
             ctx.save();
             ctx.beginPath();
             ctx.rect(hx, hy, hw, hh);
             ctx.clip();
-            ctx.filter = window.getComputedStyle(video).filter;
-            ctx.drawImage(video, hx + (hw - dw) / 2, hy + (hh - dh) / 2, dw, dh);
+            ctx.filter = aiFilterActive ? 'none' : window.getComputedStyle(video).filter;
+            ctx.drawImage(drawSource, hx + (hw - dw) / 2, hy + (hh - dh) / 2, dw, dh);
             ctx.restore();
 
             ctx.filter = 'none';
@@ -777,9 +979,16 @@
                 canvas.height = video.videoHeight || 720;
                 const ctx = canvas.getContext('2d');
 
-                // Jika memakai kamera depan, kita buat efek cermin (mirror) opsional atau biarkan natural
-                ctx.filter = window.getComputedStyle(video).filter;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                if (aiFilterActive) {
+                    // Filter V.1 (AI): pakai frame hasil komposit face-mask, bukan video mentah
+                    const beautyFrame = composeBeautyFrame(video, lastLandmarkPts);
+                    ctx.filter = 'none';
+                    ctx.drawImage(beautyFrame, 0, 0, canvas.width, canvas.height);
+                } else {
+                    // Jika memakai kamera depan, kita buat efek cermin (mirror) opsional atau biarkan natural
+                    ctx.filter = window.getComputedStyle(video).filter;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                }
 
                 ctx.filter = 'none';
 
@@ -873,6 +1082,7 @@
         window.onload = () => {
             initSession();
             syncStickerOverlay();
+            loadFaceApiModels();
             setTimeout(() => {
                 refreshCaption();
                 updateCaptionOffset();
